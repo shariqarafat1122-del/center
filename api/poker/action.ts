@@ -629,14 +629,21 @@ async function processPayouts(
   tableId:    string,
   handNumber: number,
 ): Promise<void> {
+  // Genuine split pot = more than one player books a net profit this hand.
+  // (An all-in over-bettor who only gets an uncalled refund has net <= 0 and
+  //  is therefore NOT counted as a winner here.)
+  const netWinnerCount = payouts.filter(p => p.amount > 0 && p.amount - p.totalBet > 0).length;
+  const isSplit = netWinnerCount > 1;
+
   for (const { uid, amount, totalBet, handRank } of payouts) {
     if (amount <= 0) continue;
     const net = amount - totalBet;
     if (net <= 0) continue;
     try {
       await betHistory({
-        action: 'ADD', uid, game: 'Poker', amount: net, type: 'BET_WIN',
-        description: `Win|Hand#${handNumber}|"${handRank}"|Table:"${tableName}"|Bet:₹${totalBet}Won:₹${net}`,
+        action: 'ADD', uid, game: 'Poker', amount: net,
+        type: isSplit ? 'SPLIT_POT' : 'BET_WIN',
+        description: `${isSplit ? 'Split' : 'Win'}|Hand#${handNumber}|"${handRank}"|Table:"${tableName}"|Bet:₹${totalBet}Won:₹${net}`,
         idempotencyKey: `poker_win_${tableId}_${uid}_${handNumber}`,
       });
     } catch (e) { console.error('[WIN]', { tableId, handNumber, uid, net, e }); }
